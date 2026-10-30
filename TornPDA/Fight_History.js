@@ -3,7 +3,7 @@
 // @namespace    tornpda-final-hit-history
 // @version      1.3.0
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.js
-// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.meta.js
+// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History.meta.js
 // @description  Tracks live trophy-marked fight log entries locally.
 // @match        https://www.torn.com/*
 // @run-at       document-idle

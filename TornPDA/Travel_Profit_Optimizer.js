@@ -3,7 +3,7 @@
 // @namespace    tornpda-drug-trade-route-optimizer
 // @version      1.4.0
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Travel_Profit_Optimizer.js
-// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Travel_Profit_Optimizer.meta.js
+// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Travel_Profit_Optimizer.meta.js
 // @description  Drug price comparisons and optimized travel trade routes.
 // @match        https://www.torn.com/page.php*
 // @grant        GM_xmlhttpRequest

@@ -3,7 +3,7 @@
 // @namespace    tornpda-city-sell-price
 // @version      4.1.1
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/City_Resale_Filter.js
-// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/City_Resale_Filter.meta.js
+// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/City_Resale_Filter.meta.js
 // @description  Displays the city sell price beside items on the Item Market.
 // @match        https://www.torn.com/page.php?sid=ItemMarket*
 // @run-at       document-end

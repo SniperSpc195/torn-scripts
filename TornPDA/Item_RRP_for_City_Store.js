@@ -3,7 +3,7 @@
 // @namespace    tornpda-store-rrp-highlighter
 // @version      7.0.0
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Item_RRP_for_City_Store.js
-// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Item_RRP_for_City_Store.meta.js
+// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Item_RRP_for_City_Store.meta.js
 // @description  Displays cached Torn API market values below city resale prices.
 // @match        https://www.torn.com/*
 // @run-at       document-end

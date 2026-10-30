@@ -3,7 +3,7 @@
 // @namespace    tornpda-crime-reward-values
 // @version      4.4.0
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Crime_Value.js
-// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Crime_Value.meta.js
+// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Crime_Value.meta.js
 // @description  Automatically displays crime reward market values in a compact top popup.
 // @match        https://www.torn.com/*
 // @run-at       document-end

@@ -3,7 +3,7 @@
  // @namespace    torn-sales-by-buyer
  // @version      2.1.0
  // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Bazaar%20Records.js
- // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Bazaar%20Records.meta.js
+ // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Bazaar%20Records.meta.js
  // @description  Bazaar sales totals grouped by buyer with clickable profiles.
  // @match        https://www.torn.com/*
  // @run-at       document-end
