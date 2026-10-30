@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Final-Hit History
 // @namespace    tornpda-final-hit-history
-// @version      1.3.2
+// @version      1.3.4
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History.meta.js
 // @description  Tracks live trophy-marked fight log entries locally.
@@ -20,6 +20,8 @@
     const PANEL_ID = "torn-fhh-panel";
     const STYLE_ID = "torn-fhh-style";
     const WAKE_BUTTON_ID = "torn-fhh-wake-button";
+    const ATTACK_LOG_SELECTOR = '[class*="logStatsWrap"]';
+    const FINAL_HIT_PATTERN = /\bleft\s+.+?\s+on the street\b|\bhospitali[sz](?:e|es|ed|ing)\b|\bmug(?:s|ged|ging)?\b/i;
 
     if (window.__tornFinalHitHistoryInitialized) return;
     window.__tornFinalHitHistoryInitialized = true;
@@ -112,84 +114,36 @@
         return cleanText(element.innerText || element.textContent || "");
     }
 
-    function looksLikeTrophy(element) {
-        const values = [
-            element.getAttribute("alt"),
-            element.getAttribute("title"),
-            element.getAttribute("aria-label"),
-            element.getAttribute("data-testid"),
-            element.getAttribute("src"),
-            element.getAttribute("class"),
-            element.getAttribute("href")
-        ];
+    function getFightLogEntries() {
+        const candidates = [];
 
-        if (element.outerHTML) {
-            values.push(element.outerHTML.slice(0, 700));
-        }
+        document.querySelectorAll(ATTACK_LOG_SELECTOR).forEach(root => {
+            root.querySelectorAll("*").forEach(element => {
+                const text = getElementText(element);
+                const match = text.match(FINAL_HIT_PATTERN);
 
-        return /trophy|winner|winning|victory|final.?hit/i.test(
-            values.filter(Boolean).join(" ")
-        );
-    }
+                if (!match || text.length > 220) return;
 
-    function findLogRow(icon) {
-        let element = icon.parentElement;
-        let fallback = null;
+                candidates.push({
+                    element,
+                    text,
+                    key: match[0].toLowerCase().replace(/\s+/g, " ")
+                });
+            });
+        });
 
-        for (let depth = 0; element && depth < 10; depth++) {
-            const text = getElementText(element);
+        candidates.sort((a, b) => b.text.length - a.text.length);
 
-            if (text.length >= 12 && text.length <= 450) {
-                const tag = element.tagName.toLowerCase();
-                const role = element.getAttribute("role") || "";
-                const classes = typeof element.className === "string"
-                    ? element.className
-                    : "";
-
-                if (
-                    tag === "tr" ||
-                    tag === "li" ||
-                    tag === "article" ||
-                    role === "row" ||
-                    /action|event|log|history|battle|outcome/i.test(classes)
-                ) {
-                    return element;
-                }
-
-                if (!fallback) fallback = element;
+        const entriesByFinalHit = new Map();
+        for (const candidate of candidates) {
+            if (!entriesByFinalHit.has(candidate.key)) {
+                entriesByFinalHit.set(candidate.key, candidate);
             }
-
-            element = element.parentElement;
         }
 
-        return fallback;
-    }
-
-    function getTrophyEntries() {
-        const elements = document.querySelectorAll(
-            "img, svg, [role='img'], [aria-label], [title], [data-testid]"
+        return new Map(
+            Array.from(entriesByFinalHit.values(), ({ element, text }) => [element, text])
         );
-
-        const byRow = new Map();
-
-        for (const icon of elements) {
-            if (!looksLikeTrophy(icon)) continue;
-
-            const row = findLogRow(icon);
-            if (!row) continue;
-
-            const text = getElementText(row);
-            if (text.length < 12 || text.length > 450) continue;
-            if (!looksLikeFightLogEntry(text)) continue;
-
-            byRow.set(row, text);
-        }
-
-        return byRow;
-    }
-
-    function looksLikeFightLogEntry(text) {
-        return /\b(?:hit|hits|missed|misses|fired|fires|attacked|attacks|defeated|hospitalized|mugged|mugs|shot|struck|damaged|damage|punched|kicked|stabbed|slashed|used)\b/i.test(text);
     }
 
     function recordEntry(action, row) {
@@ -258,15 +212,15 @@
         resetBaseline();
     }
 
-    const currentEntries = getTrophyEntries();
+    const currentEntries = getFightLogEntries();
 
-    // Establish the baseline immediately, even if no trophies
+    // Establish the baseline immediately, even if no final hits
     // have appeared yet.
     if (!baselineEstablished) {
         baselineEstablished = true;
         previousEntries = new Map();
 
-        // Save trophies already visible when monitoring begins.
+        // Save final hits already visible when monitoring begins.
         for (const [row, text] of currentEntries) {
             recordEntry(text, row);
         }
@@ -275,7 +229,7 @@
 
         console.info(
             PREFIX,
-            "Baseline established. Existing trophies:",
+            "Baseline established. Existing final hits:",
             currentEntries.size
         );
         return;
