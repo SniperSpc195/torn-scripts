@@ -1,0 +1,1 @@
+If it is imaginable, it is possible. As long as it follows Torn's Guidelines. If you have ideas, let me know and I can try to build something when I can. Or send a script for me to review later, but no sneaky business!
