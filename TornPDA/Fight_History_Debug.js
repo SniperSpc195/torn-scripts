@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fight History DOM Debugger
 // @namespace    tornpda-final-hit-history-debug
-// @version      1.0.0
+// @version      1.0.1
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History_Debug.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History_Debug.meta.js
 // @description  Locally inspects trophy markers and likely fight-log rows.
@@ -189,6 +189,29 @@
         return report;
     }
 
+    async function copyReport(output, status) {
+        output.focus();
+        output.select();
+        output.setSelectionRange(0, output.value.length);
+
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(output.value);
+                status.textContent = "Report copied to clipboard.";
+                return;
+            }
+        } catch (_) {}
+
+        try {
+            if (document.execCommand("copy")) {
+                status.textContent = "Report copied to clipboard.";
+                return;
+            }
+        } catch (_) {}
+
+        status.textContent = "Report selected. Use your device's Copy action.";
+    }
+
     function addStyles() {
         if (document.getElementById(STYLE_ID)) return;
         const style = document.createElement("style");
@@ -226,18 +249,48 @@
         const scanButton = document.createElement("button");
         scanButton.type = "button";
         scanButton.textContent = "Scan page";
+        const copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.textContent = "Copy report";
+        copyButton.disabled = true;
+        const selectButton = document.createElement("button");
+        selectButton.type = "button";
+        selectButton.textContent = "Select report";
         const closeButton = document.createElement("button");
         closeButton.type = "button";
         closeButton.textContent = "Close";
-        controls.append(scanButton, closeButton);
+        controls.append(scanButton, copyButton, selectButton, closeButton);
 
-        const output = document.createElement("pre");
-        output.textContent = "Tap Scan page to inspect marker candidates and attack-log containers.";
-        panel.append(controls, output);
+        const output = document.createElement("textarea");
+        output.readOnly = true;
+        output.setAttribute("aria-label", "Fight history debug report");
+        output.value = "Tap Scan page to inspect marker candidates and attack-log containers.";
+        output.style.cssText =
+            "display:block;width:100%;height:45vh;min-height:180px;" +
+            "resize:vertical;white-space:pre;overflow:auto;" +
+            "padding:6px;border:1px solid #657180;border-radius:4px;" +
+            "background:#101316;color:#f4f6f8;font:11px/1.35 monospace;" +
+            "-webkit-user-select:text;user-select:text;";
+
+        const status = document.createElement("div");
+        status.setAttribute("aria-live", "polite");
+        status.style.cssText = "margin-top:6px;color:#d1d5db;";
+        panel.append(controls, output, status);
         document.body.appendChild(panel);
 
         scanButton.addEventListener("click", () => {
-            output.textContent = JSON.stringify(scanPage(), null, 2);
+            output.value = JSON.stringify(scanPage(), null, 2);
+            copyButton.disabled = false;
+            status.textContent = "Report ready. It contains visible page text; redact names or IDs before sharing.";
+        });
+        copyButton.addEventListener("click", () => {
+            copyReport(output, status);
+        });
+        selectButton.addEventListener("click", () => {
+            output.focus();
+            output.select();
+            output.setSelectionRange(0, output.value.length);
+            status.textContent = "Report selected. Use your device's Copy action.";
         });
         closeButton.addEventListener("click", () => panel.remove());
     }
