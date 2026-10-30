@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Final-Hit History
 // @namespace    tornpda-final-hit-history
-// @version      1.3.0
+// @version      1.3.1
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History.meta.js
 // @description  Tracks live trophy-marked fight log entries locally.
@@ -56,28 +56,29 @@
         );
     }
 
-    function getTCTTimestamp() {
-        const now = new Date();
-        const date = new Intl.DateTimeFormat("en-CA", {
-            timeZone: "UTC",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit"
-        }).format(now);
+   function getTCTTimestamp(elapsedSeconds = 0) {
+    const now = new Date(Date.now() - elapsedSeconds * 1000);
 
-        const time = new Intl.DateTimeFormat("en-GB", {
-            timeZone: "UTC",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hourCycle: "h23"
-        }).format(now);
+    const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).format(now);
 
-        return {
-            iso: now.toISOString(),
-            display: `${date} ${time} TCT`
-        };
-    }
+    const time = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "UTC",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23"
+    }).format(now);
+
+    return {
+        iso: now.toISOString(),
+        display: `${date} ${time} TCT`
+    };
+}
 
     function loadEntries() {
         try {
@@ -186,104 +187,123 @@
         return byRow;
     }
 
-    function recordEntry(action) {
-        const timestamp = getTCTTimestamp();
-        const pageIdentity = getPageIdentity();
-        const entries = loadEntries();
-        const dedupeKey = `${pageIdentity}|${action}`;
-        const lastTime = lastSaved.get(dedupeKey);
+    function recordEntry(action, row) {
+    const pageIdentity = getPageIdentity();
+    const entries = loadEntries();
 
-        if (lastTime && Date.now() - lastTime < 15000) {
-            return false;
+    // Extract elapsed seconds from the fight-log entry.
+    // Examples: "21s", "1m 5s", or "2m".
+    const elapsedMatch = action.match(
+        /\b(?:(\d+)\s*m(?:in)?\s*)?(\d+)\s*s(?:ec)?\b/i
+    );
+
+    let elapsedSeconds = 0;
+
+    if (elapsedMatch) {
+        elapsedSeconds =
+            (Number(elapsedMatch[1]) || 0) * 60 +
+            (Number(elapsedMatch[2]) || 0);
+    } else {
+        const minutesMatch = action.match(/\b(\d+)\s*m(?:in)?\b/i);
+        if (minutesMatch) {
+            elapsedSeconds = Number(minutesMatch[1]) * 60;
         }
-
-        const entry = {
-            key: `${timestamp.iso}|${pageIdentity}|${action}`,
-            timestamp: timestamp.iso,
-            timestampTCT: timestamp.display,
-            action,
-            pageIdentity,
-            pageUrl: location.href
-        };
-
-        entries.unshift(entry);
-        while (entries.length > MAX_ENTRIES) entries.pop();
-
-        if (!saveEntries(entries)) return false;
-
-        lastSaved.set(dedupeKey, Date.now());
-
-        if (lastSaved.size > 100) {
-            const cutoff = Date.now() - 60000;
-            for (const [key, time] of lastSaved) {
-                if (time < cutoff) lastSaved.delete(key);
-            }
-        }
-
-        console.info(PREFIX, "Recorded final hit:", action);
-
-        if (panelOpen) renderPanel();
-        return true;
     }
+
+    const timestamp = getTCTTimestamp(elapsedSeconds);
+    const dedupeKey = `${pageIdentity}|${action}`;
+    const lastTime = lastSaved.get(dedupeKey);
+
+    // Prevent repeated saves caused by multiple DOM updates.
+    if (lastTime && Date.now() - lastTime < 15000) {
+        return false;
+    }
+
+    entries.unshift({
+        key: `${timestamp.iso}|${pageIdentity}|${action}`,
+        timestamp: timestamp.iso,
+        timestampTCT: timestamp.display,
+        action,
+        pageIdentity,
+        pageUrl: location.href
+    });
+
+    while (entries.length > MAX_ENTRIES) entries.pop();
+
+    if (!saveEntries(entries)) return false;
+
+    lastSaved.set(dedupeKey, Date.now());
+
+    console.info(PREFIX, "Recorded final hit:", action);
+
+    if (panelOpen) renderPanel();
+    return true;
+}
 
     function resetBaseline() {
         baselineEstablished = false;
         previousEntries = new Map();
     }
 
-    function scanFightLog() {
-        if (!isSupportedPage()) return;
+   function scanFightLog() {
+    if (!isSupportedPage()) return;
 
-        if (previousPage !== location.href) {
-            previousPage = location.href;
-            resetBaseline();
-        }
+    if (previousPage !== location.href) {
+        previousPage = location.href;
+        resetBaseline();
+    }
 
-        const currentEntries = getTrophyEntries();
+    const currentEntries = getTrophyEntries();
 
-        if (!baselineEstablished) {
-            if (currentEntries.size > 0) {
-                previousEntries = new Map(currentEntries);
-                baselineEstablished = true;
-                console.info(
-                    PREFIX,
-                    "Baseline established with",
-                    currentEntries.size,
-                    "trophy row(s)."
-                );
-            }
-            return;
-        }
+    // Establish the baseline immediately, even if no trophies
+    // have appeared yet.
+    if (!baselineEstablished) {
+        baselineEstablished = true;
+        previousEntries = new Map();
 
+        // Save trophies already visible when monitoring begins.
         for (const [row, text] of currentEntries) {
-            const oldText = previousEntries.get(row);
-
-            if (oldText === undefined) {
-                const alreadyVisible = Array.from(previousEntries.values())
-                    .includes(text);
-
-                if (!alreadyVisible) recordEntry(text);
-            } else if (oldText !== text) {
-                recordEntry(text);
-            }
-        }
-
-        const oldTexts = new Set(previousEntries.values());
-        const newTexts = new Set(currentEntries.values());
-
-        for (const text of newTexts) {
-            if (!oldTexts.has(text)) {
-                const alreadyHandled = Array.from(currentEntries.entries())
-                    .some(([row, rowText]) =>
-                        rowText === text && previousEntries.has(row)
-                    );
-
-                if (!alreadyHandled) recordEntry(text);
-            }
+            recordEntry(text, row);
         }
 
         previousEntries = new Map(currentEntries);
+
+        console.info(
+            PREFIX,
+            "Baseline established. Existing trophies:",
+            currentEntries.size
+        );
+        return;
     }
+
+    // Save newly added trophy rows and changed trophy entries.
+    for (const [row, text] of currentEntries) {
+        const oldText = previousEntries.get(row);
+
+        if (oldText === undefined) {
+            const alreadyVisible = Array.from(previousEntries.values())
+                .includes(text);
+
+            if (!alreadyVisible) {
+                recordEntry(text, row);
+            }
+        } else if (oldText !== text) {
+            recordEntry(text, row);
+        }
+    }
+
+    // Also detect replacement rows when Torn rebuilds the log.
+    const oldTexts = new Set(previousEntries.values());
+    const newTexts = new Set(currentEntries.values());
+
+    for (const text of newTexts) {
+        if (!oldTexts.has(text)) {
+            recordEntry(text, null);
+        }
+    }
+
+    previousEntries = new Map(currentEntries);
+}
 
     function scheduleScan() {
         if (scanTimer) clearTimeout(scanTimer);
@@ -411,7 +431,8 @@
         const style = document.createElement("style");
         style.id = STYLE_ID;
         style.textContent = `
-            #${BUTTON_ID}, #${WAKE_BUTTON_ID} {
+            #${BUTTON_ID},
+            #${WAKE_BUTTON_ID} {
                 position: fixed;
                 right: 8px;
                 z-index: 2147483000;
@@ -424,20 +445,20 @@
                 cursor: pointer;
             }
             #${BUTTON_ID} {
-                top: 8px;
+                bottom: 76px;
                 background: #17364a;
             }
             #${WAKE_BUTTON_ID} {
-                top: 43px;
+                bottom: 40px;
                 background: #303a42;
             }
             #${PANEL_ID} {
                 position: fixed;
-                top: 78px;
+                bottom: 116px;
                 right: 8px;
                 z-index: 2147483001;
                 width: min(360px, calc(100vw - 16px));
-                max-height: 65vh;
+                max-height: 55vh;
                 overflow-y: auto;
                 box-sizing: border-box;
                 padding: 9px;
