@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Final-Hit History
 // @namespace    tornpda-final-hit-history
-// @version      1.3.4
+// @version      1.3.5
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History.meta.js
 // @description  Tracks live trophy-marked fight log entries locally.
@@ -21,7 +21,7 @@
     const STYLE_ID = "torn-fhh-style";
     const WAKE_BUTTON_ID = "torn-fhh-wake-button";
     const ATTACK_LOG_SELECTOR = '[class*="logStatsWrap"]';
-    const FINAL_HIT_PATTERN = /\bleft\s+.+?\s+on the street\b|\bhospitali[sz](?:e|es|ed|ing)\b|\bmug(?:s|ged|ging)?\b/i;
+    const FINAL_HIT_PATTERN = /\b(\S+)\s+(left\s+.+?\s+on the street(?:\s+\([^)]*\))?|hospitali[sz](?:e|es|ed|ing)\s+\S+|mug(?:s|ged|ging)?\s+\S+)(?:\s+(\d+(?:\.\d+)?\s*s))?/gi;
 
     if (window.__tornFinalHitHistoryInitialized) return;
     window.__tornFinalHitHistoryInitialized = true;
@@ -115,34 +115,33 @@
     }
 
     function getFightLogEntries() {
-        const candidates = [];
+        const entriesByFinalHit = new Map();
 
         document.querySelectorAll(ATTACK_LOG_SELECTOR).forEach(root => {
-            root.querySelectorAll("*").forEach(element => {
+            const elements = [root, ...root.querySelectorAll("*")];
+
+            for (const element of elements) {
                 const text = getElementText(element);
-                const match = text.match(FINAL_HIT_PATTERN);
 
-                if (!match || text.length > 220) return;
+                for (const match of text.matchAll(FINAL_HIT_PATTERN)) {
+                    const entryText = [match[1], match[2], match[3]]
+                        .filter(Boolean)
+                        .join(" ");
+                    const key = entryText.toLowerCase().replace(/\s+/g, " ");
+                    const existing = entriesByFinalHit.get(key);
 
-                candidates.push({
-                    element,
-                    text,
-                    key: match[0].toLowerCase().replace(/\s+/g, " ")
-                });
-            });
+                    if (!existing || text.length < existing.sourceLength) {
+                        entriesByFinalHit.set(key, {
+                            text: entryText,
+                            sourceLength: text.length
+                        });
+                    }
+                }
+            }
         });
 
-        candidates.sort((a, b) => b.text.length - a.text.length);
-
-        const entriesByFinalHit = new Map();
-        for (const candidate of candidates) {
-            if (!entriesByFinalHit.has(candidate.key)) {
-                entriesByFinalHit.set(candidate.key, candidate);
-            }
-        }
-
         return new Map(
-            Array.from(entriesByFinalHit.values(), ({ element, text }) => [element, text])
+            Array.from(entriesByFinalHit, ([key, entry]) => [key, entry.text])
         );
     }
 
