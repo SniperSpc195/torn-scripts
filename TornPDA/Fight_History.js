@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Final-Hit History
 // @namespace    tornpda-final-hit-history
-// @version      1.3.1
+// @version      1.3.2
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History.meta.js
 // @description  Tracks live trophy-marked fight log entries locally.
@@ -180,11 +180,16 @@
 
             const text = getElementText(row);
             if (text.length < 12 || text.length > 450) continue;
+            if (!looksLikeFightLogEntry(text)) continue;
 
             byRow.set(row, text);
         }
 
         return byRow;
+    }
+
+    function looksLikeFightLogEntry(text) {
+        return /\b(?:hit|hits|missed|misses|fired|fires|attacked|attacks|defeated|hospitalized|mugged|mugs|shot|struck|damaged|damage|punched|kicked|stabbed|slashed|used)\b/i.test(text);
     }
 
     function recordEntry(action, row) {
