@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Final-Hit History
 // @namespace    tornpda-final-hit-history
-// @version      1.3.5
+// @version      1.3.6
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History.meta.js
 // @description  Tracks live trophy-marked fight log entries locally.
@@ -124,16 +124,30 @@
                 const text = getElementText(element);
 
                 for (const match of text.matchAll(FINAL_HIT_PATTERN)) {
-                    const entryText = [match[1], match[2], match[3]]
+                    const eventText = [match[1], match[2]]
                         .filter(Boolean)
                         .join(" ");
-                    const key = entryText.toLowerCase().replace(/\s+/g, " ");
+                    const key = eventText
+                        .replace(/\s+\([^)]*\)/g, "")
+                        .toLowerCase()
+                        .replace(/\s+/g, " ")
+                        .trim();
+                    const entryText = [eventText, match[3]]
+                        .filter(Boolean)
+                        .join(" ");
                     const existing = entriesByFinalHit.get(key);
+                    const hasElapsedTime = Boolean(match[3]);
 
-                    if (!existing || text.length < existing.sourceLength) {
+                    if (
+                        !existing ||
+                        (hasElapsedTime && !existing.hasElapsedTime) ||
+                        (hasElapsedTime === existing.hasElapsedTime &&
+                            text.length < existing.sourceLength)
+                    ) {
                         entriesByFinalHit.set(key, {
                             text: entryText,
-                            sourceLength: text.length
+                            sourceLength: text.length,
+                            hasElapsedTime
                         });
                     }
                 }
@@ -145,7 +159,7 @@
         );
     }
 
-    function recordEntry(action, row) {
+    function recordEntry(action, eventKey) {
     const pageIdentity = getPageIdentity();
     const entries = loadEntries();
 
@@ -169,7 +183,7 @@
     }
 
     const timestamp = getTCTTimestamp(elapsedSeconds);
-    const dedupeKey = `${pageIdentity}|${action}`;
+    const dedupeKey = `${pageIdentity}|${eventKey}`;
     const lastTime = lastSaved.get(dedupeKey);
 
     // Prevent repeated saves caused by multiple DOM updates.
@@ -220,8 +234,8 @@
         previousEntries = new Map();
 
         // Save final hits already visible when monitoring begins.
-        for (const [row, text] of currentEntries) {
-            recordEntry(text, row);
+        for (const [eventKey, text] of currentEntries) {
+            recordEntry(text, eventKey);
         }
 
         previousEntries = new Map(currentEntries);
@@ -234,29 +248,10 @@
         return;
     }
 
-    // Save newly added trophy rows and changed trophy entries.
-    for (const [row, text] of currentEntries) {
-        const oldText = previousEntries.get(row);
-
-        if (oldText === undefined) {
-            const alreadyVisible = Array.from(previousEntries.values())
-                .includes(text);
-
-            if (!alreadyVisible) {
-                recordEntry(text, row);
-            }
-        } else if (oldText !== text) {
-            recordEntry(text, row);
-        }
-    }
-
-    // Also detect replacement rows when Torn rebuilds the log.
-    const oldTexts = new Set(previousEntries.values());
-    const newTexts = new Set(currentEntries.values());
-
-    for (const text of newTexts) {
-        if (!oldTexts.has(text)) {
-            recordEntry(text, null);
+    // Record only event keys not seen in the previous scan.
+    for (const [eventKey, text] of currentEntries) {
+        if (!previousEntries.has(eventKey)) {
+            recordEntry(text, eventKey);
         }
     }
 
