@@ -170,3 +170,10 @@ Before modifying an existing script:
 Do not silently change business logic, calculations, data sources, pricing assumptions, storage behavior, or interface placement.
 
 When requirements conflict, follow the user's most recent explicit instruction for that project and explain any important trade-offs.
+
+## 14. User-Specific Release and Commit Workflow
+
+- After changing a userscript, increment its `@version` in the main `.js` file and update the matching `TornPDA/meta/<script-name>.meta.js` file to the same version in the same change. Use the next patch version unless the scope warrants a minor or major version increment.
+- Keep the main script's `@downloadURL` pointed at that script's raw GitHub URL and its `@updateURL` pointed at the corresponding file under `TornPDA/meta/`.
+- Keep the metadata file's name, namespace, version, match pattern, run time, grants, and download URL consistent with the main script. Create the metadata file if a remotely updateable script does not have one.
+- After finishing and validating a requested code change, provide a concise, ready-to-paste commit message summarizing the changes since the last commit. Do not create the commit unless explicitly asked.
