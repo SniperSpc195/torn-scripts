@@ -19,6 +19,9 @@ Treat the requirements of each individual project as authoritative when they dif
 - Avoid duplicate event listeners, observers, buttons, timers, and interface elements during navigation or reinitialization.
 - Restrict execution to the intended Torn pages whenever possible.
 - Do not assume a userscript is working merely because it initializes without errors.
+- Use selector fallbacks for Torn CSS module classes (hashed names change on site deploys): try specific classes first, then attribute-based fallbacks such as `[class*="outcomeReward"]`.
+- Add a double-initialization guard (`window.__<script-name>Initialized`) to prevent duplicate observers and injected elements during TornPDA SPA re-injection.
+- Detect page changes by polling `location.href` (e.g. every 1s) so the script cleans up and reinitializes on SPA navigation without a full reload.
 
 ## 3. Mobile-First Interface Design
 
@@ -68,6 +71,7 @@ The user prefers scripts that avoid unnecessary API calls.
 - Respect API rate limits and applicable Torn API rules.
 - Never hardcode a real API key into publicly shared code.
 - Use an explicit placeholder when a key must be supplied by the user.
+- For TornPDA-injected keys (`###PDA-APIKEY###`), fall back to a user-stored key in `localStorage` for desktop browsers so the script works on both platforms.
 - Do not transmit private game data to third parties without a clear requirement and user awareness.
 - Avoid frequent polling when a MutationObserver or another event-driven approach is more appropriate.
 - Prevent observers from reacting indefinitely to the script's own DOM modifications.
@@ -132,6 +136,7 @@ If the user provides a screenshot, use it to understand the visible interface, b
 - Increment the script version when making a meaningful release.
 - Review selectors, event listeners, storage behavior, timers, and observer cleanup before delivery.
 - Check for syntax errors and obvious logic errors before presenting the script.
+- Use a prefixed console log function (e.g. `[Script Name]`) for debug output that is easy to filter in the browser console.
 
 ## 11. How to Deliver Code to This User
 
