@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA - City Sell Price
 // @namespace    tornpda-city-sell-price
-// @version      4.1.1
+// @version      4.1.2
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/City_Resale_Filter.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/City_Resale_Filter.meta.js
 // @description  Displays the city sell price beside items on the Item Market.
@@ -12,7 +12,27 @@
 (function () {
     'use strict';
 
-    const API_KEY = '###PDA-APIKEY###';
+    // TornPDA City Sell Price
+    // Displays Torn API city sell prices beside items on the Item Market.
+    // Works on both TornPDA and desktop browsers. TornPDA injects the API key
+    // automatically; on desktop, store your key in localStorage under
+    // "tornpda_city_api_key". Prices are cached for 24 hours.
+
+    const STORAGE_KEY_PREFIX = "tornpda_city_api_key";
+
+    function resolveApiKey() {
+        const inlineKey = "###PDA-APIKEY###";
+        if (inlineKey && !inlineKey.includes("###") && inlineKey.length >= 10) {
+            return inlineKey;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY_PREFIX);
+            if (stored && stored.length >= 10) return stored;
+        } catch (_) {}
+        return null;
+    }
+
+    const API_KEY = resolveApiKey();
     const API_BASE = 'https://api.torn.com/v2/';
     const CACHE_KEY = 'tornpda_city_prices_v4';
     const CACHE_TIME = 24 * 60 * 60 * 1000;
@@ -57,6 +77,8 @@
                 }
             } catch (_) {}
         }
+
+        if (!API_KEY) return;
 
         const url = API_BASE + 'torn/items?key=' + encodeURIComponent(API_KEY);
         const data = await apiGet(url);

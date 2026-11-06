@@ -1,7 +1,7 @@
 // ==UserScript==
  // @name         Torn 24-Hour Sales by Buyer
  // @namespace    torn-sales-by-buyer
- // @version      2.1.0
+ // @version      2.1.1
  // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Bazaar%20Records.js
  // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Bazaar%20Records.meta.js
  // @description  Bazaar sales totals grouped by buyer with clickable profiles.
@@ -13,10 +13,30 @@
  (function () {
      "use strict";
 
+     // TornPDA Bazaar Records
+     // Displays bazaar sales totals grouped by buyer over the last 24 hours.
+     // Works on both TornPDA and desktop browsers. TornPDA injects the API key
+     // automatically; on desktop, store your key in localStorage under
+     // "tornpda_bazaar_api_key".
+
      if (window.__tornSalesByBuyerLoaded) return;
      window.__tornSalesByBuyerLoaded = true;
 
-     const PDAKey = "###PDA-APIKEY###";
+     const STORAGE_KEY_PREFIX = "tornpda_bazaar_api_key";
+
+     function resolveApiKey() {
+         const inlineKey = "###PDA-APIKEY###";
+         if (inlineKey && !inlineKey.includes("###") && inlineKey.length >= 10) {
+             return inlineKey;
+         }
+         try {
+             const stored = localStorage.getItem(STORAGE_KEY_PREFIX);
+             if (stored && stored.length >= 10) return stored;
+         } catch (_) {}
+         return null;
+     }
+
+     const API_KEY = resolveApiKey();
      const PREFIX = "[Sales by Buyer]";
      const PAGE_SIZE = 1000;
 
@@ -188,10 +208,12 @@
                      );
                  }
 
-                 if (!PDAKey || PDAKey.startsWith("#")) {
-                     throw new Error(
-                         "API key injection failed. Check TornPDA settings."
-                     );
+                 if (!API_KEY) {
+                     $("sb-status").textContent =
+                         "No API key available (set it in TornPDA or localStorage).";
+                     busy = false;
+                     $("sb-run").disabled = false;
+                     return;
                  }
 
                  const end = Math.floor(Date.now() / 1000);
@@ -232,7 +254,7 @@
              "?limit=" + PAGE_SIZE +
              "&from=" + encodeURIComponent(from) +
              "&to=" + encodeURIComponent(to) +
-             "&key=" + encodeURIComponent(PDAKey);
+             "&key=" + encodeURIComponent(API_KEY);
 
          const response = await PDA_httpGet(url, {});
          if (!response) throw new Error("Empty API response.");
@@ -408,7 +430,7 @@
                      "https://api.torn.com/user/" +
                      encodeURIComponent(id) +
                      "?selections=basic&key=" +
-                     encodeURIComponent(PDAKey);
+                     encodeURIComponent(API_KEY);
 
                  const response = await PDA_httpGet(url, {});
 

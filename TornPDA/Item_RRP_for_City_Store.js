@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Store Market RRP Highlighter
 // @namespace    tornpda-store-rrp-highlighter
-// @version      7.0.0
+// @version      7.0.1
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Item_RRP_for_City_Store.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Item_RRP_for_City_Store.meta.js
 // @description  Displays cached Torn API market values below city resale prices.
@@ -16,8 +16,28 @@
     if (window.__storeRRPv7Running) return;
     window.__storeRRPv7Running = true;
 
+    // Torn City Store Market RRP Highlighter
+    // Displays cached Torn API market values below city resale prices.
+    // Works on both TornPDA and desktop browsers. TornPDA injects the API key
+    // automatically; on desktop, store your key in localStorage under
+    // "tornpda_store_api_key". Prices are cached for 7 days.
+
+    const STORAGE_KEY_PREFIX = "tornpda_store_api_key";
+
+    function resolveApiKey() {
+        const inlineKey = "###PDA-APIKEY###";
+        if (inlineKey && !inlineKey.includes("###") && inlineKey.length >= 10) {
+            return inlineKey;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY_PREFIX);
+            if (stored && stored.length >= 10) return stored;
+        } catch (_) {}
+        return null;
+    }
+
     const PREFIX = "[Store RRP]";
-    const API_KEY = "###PDA-APIKEY###";
+    const API_KEY = resolveApiKey();
     const API_URL = "https://api.torn.com/torn/?selections=items&key=";
     const CACHE_KEY = "store_rrp_market_value_v7";
     const RETRY_KEY = "store_rrp_market_value_v7_retry";
@@ -118,18 +138,9 @@
     }
 
     async function fetchPrices() {
-        if (!API_KEY || API_KEY.includes("###") || API_KEY.length < 10) {
-            throw new Error(
-                "TornPDA did not inject a valid API key. " +
-                "Check TornPDA's API-key settings."
-            );
-        }
-
-        if (typeof PDA_httpGet !== "function") {
-            throw new Error(
-                "PDA_httpGet is unavailable. " +
-                "Check that TornPDA is running this script."
-            );
+        if (!API_KEY) {
+            log("No API key available; using cached prices only.");
+            return;
         }
 
         const response = await PDA_httpGet(API_URL + encodeURIComponent(API_KEY), {});
