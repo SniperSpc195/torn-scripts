@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA Crime Reward Values
 // @namespace    tornpda-crime-reward-values
-// @version      4.4.0
+// @version      4.5.0
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Crime_Value.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Crime_Value.meta.js
 // @description  Automatically displays crime reward market values in a compact top popup.
@@ -13,12 +13,48 @@
 (function () {
     "use strict";
 
-    const API_KEY = "###PDA-APIKEY###";
+    // TornPDA Crime Reward Values
+    // Displays Torn API market values for items received from crimes in a
+    // compact top-center popup. Works on both TornPDA and desktop browsers.
+    // TornPDA injects the API key automatically; on desktop, store your key
+    // in localStorage under "tornpda_crime_api_key". Prices are cached for
+    // 24 hours so the popup still works offline or without an API key.
+
+    // Prevent duplicate initialization on TornPDA SPA re-injection
+    if (window.__crimeRewardValuesInitialized) return;
+    window.__crimeRewardValuesInitialized = true;
+
+    const PREFIX = "[Crime Values]";
+    const STORAGE_KEY_PREFIX = "tornpda_crime_api_key";
     const CACHE_KEY = "tornpda_crime_item_prices_v1";
     const CACHE_TTL = 24 * 60 * 60 * 1000;
+    const POLL_INTERVAL = 1000;
 
-    const RESULT_SELECTOR = ".outcomeReward___aVKEh";
-    const ITEM_SELECTOR = ".rewards___m4tv6 img.torn-item";
+    function log(...args) {
+        console.log(PREFIX, ...args);
+    }
+
+    // Selector fallbacks: Torn CSS module classes change on site deploys.
+    // Try specific classes first, then attribute-based fallbacks.
+    const RESULT_SELECTORS = [
+        ".outcomeReward___aVKEh",
+        '[class*="outcomeReward"]',
+        '[class*="crime-outcome"]'
+    ];
+    const ITEM_SELECTORS = [
+        ".rewards___m4tv6 img.torn-item",
+        '[class*="rewards"] img.torn-item',
+        'img.torn-item[src*="/items/"]'
+    ];
+    const ITEM_TILE_SELECTORS = [
+        ".baseItemTileWrapper___tV9VZ",
+        '[class*="baseItemTileWrapper"]'
+    ];
+    const TILE_COUNTER_SELECTORS = [
+        ".tileCounterText___M9kgO",
+        '[class*="tileCounterText"]'
+    ];
+
     const POPUP_ID = "crv-popup";
     const STYLE_ID = "crv-popup-style";
 
@@ -27,10 +63,28 @@
     let priceError = "";
     let activeSection = null;
     let refreshScheduled = false;
+    let previousHref = location.href;
+    let pageChangeTimer = null;
 
     const processed = new WeakMap();
 
-    if (!document.getElementById(STYLE_ID)) {
+    // API key: TornPDA injects the real key; desktop falls back to stored key
+    function resolveApiKey() {
+        const inlineKey = "###PDA-APIKEY###";
+        if (inlineKey && !inlineKey.includes("###") && inlineKey.length >= 10) {
+            return inlineKey;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY_PREFIX);
+            if (stored && stored.length >= 10) return stored;
+        } catch (_) {}
+        return null;
+    }
+
+    const API_KEY = resolveApiKey();
+
+    function addStyles() {
+        if (document.getElementById(STYLE_ID)) return;
         const style = document.createElement("style");
         style.id = STYLE_ID;
         style.textContent = `
@@ -57,7 +111,6 @@
                 line-height: 1.2 !important;
                 pointer-events: auto !important;
             }
-
             #${POPUP_ID} * { box-sizing: border-box !important; }
             #${POPUP_ID} .crv-header {
                 display: flex;
@@ -138,22 +191,61 @@
                 return data.prices;
             }
         } catch (_) {}
+        return null;
+    }
 
+    function findElements(root, selectors) {
+        for (const sel of selectors) {
+            try {
+                const found = root.querySelectorAll(sel);
+                if (found.length > 0) return Array.from(found);
+            } catch (_) {}
+        }
+        return [];
+    }
+
+    function findElement(root, selectors) {
+        for (const sel of selectors) {
+            try {
+                const found = root.querySelector(sel);
+                if (found) return found;
+            } catch (_) {}
+        }
+        return null;
+    }
+
+    function matchesAny(node, selectors) {
+        for (const sel of selectors) {
+            try {
+                if (node.matches(sel)) return true;
+            } catch (_) {}
+        }
+        return false;
+    }
+
+    function closestAny(element, selectors) {
+        if (!element || !element.closest) return null;
+        for (const sel of selectors) {
+            try {
+                const found = element.closest(sel);
+                if (found) return found;
+            } catch (_) {}
+        }
         return null;
     }
 
     async function loadPrices() {
         const cached = readCache();
-
         if (cached) {
             prices = cached;
             pricesReady = true;
+            log("Prices from cache:", Object.keys(prices).length, "items");
             updatePopup();
             return;
         }
 
-        if (!API_KEY || API_KEY.includes("###")) {
-            priceError = "API key was not injected";
+        if (!API_KEY) {
+            priceError = "No API key available (set it in TornPDA or localStorage)";
             pricesReady = true;
             updatePopup();
             return;
@@ -164,7 +256,6 @@
                 "https://api.torn.com/torn/?selections=items&key=" +
                 encodeURIComponent(API_KEY)
             );
-
             if (!response.ok) {
                 throw new Error("HTTP " + response.status);
             }
@@ -178,7 +269,6 @@
             for (const id in (data.items || {})) {
                 const raw = data.items[id].market_value;
                 const value = Number(raw);
-
                 if (
                     raw !== null &&
                     raw !== undefined &&
@@ -191,6 +281,8 @@
             }
 
             prices = fresh;
+            pricesReady = true;
+            log("Prices from API:", Object.keys(prices).length, "items");
 
             try {
                 localStorage.setItem(
@@ -198,18 +290,21 @@
                     JSON.stringify({ time: Date.now(), prices })
                 );
             } catch (_) {}
+
+            updatePopup();
         } catch (error) {
             priceError = error.message || "Unable to load prices";
+            pricesReady = true;
+            log("Price load failed:", priceError);
+            updatePopup();
         }
-
-        pricesReady = true;
-        updatePopup();
     }
 
     function getRewards(section) {
         const found = new Map();
+        const imgs = findElements(section, ITEM_SELECTORS);
 
-        section.querySelectorAll(ITEM_SELECTOR).forEach(img => {
+        imgs.forEach(img => {
             const src = img.getAttribute("src") || "";
             const match = src.match(/\/items\/(\d+)\//);
             if (!match) return;
@@ -217,18 +312,17 @@
             const id = match[1];
             const alt = (img.getAttribute("alt") || "").trim();
             const quantityMatch = alt.match(/,\s*(\d+)\s*$/);
-            const tile = img.closest(".baseItemTileWrapper___tV9VZ");
+            const tile = closestAny(img, ITEM_TILE_SELECTORS);
 
             let quantity = quantityMatch
                 ? parseInt(quantityMatch[1], 10)
                 : 1;
 
             if (!quantityMatch && tile) {
-                const counter = tile.querySelector(".tileCounterText___M9kgO");
+                const counter = findElement(tile, TILE_COUNTER_SELECTORS);
                 const parsed = counter
                     ? parseInt(counter.textContent.trim(), 10)
                     : 1;
-
                 if (Number.isFinite(parsed) && parsed > 0) {
                     quantity = parsed;
                 }
@@ -256,7 +350,8 @@
     }
 
     function closePopup() {
-        document.getElementById(POPUP_ID)?.remove();
+        const el = document.getElementById(POPUP_ID);
+        if (el) el.remove();
         activeSection = null;
     }
 
@@ -308,44 +403,37 @@
 
         const close = document.createElement("button");
         close.className = "crv-close";
-        close.type = "button";
-        close.textContent = "×";
-        close.setAttribute("aria-label", "Close reward values");
+        close.textContent = "✕";
         close.addEventListener("click", closePopup);
 
         header.append(heading, close);
         popup.appendChild(header);
-
-        if (!pricesReady) {
-            const loading = document.createElement("div");
-            loading.textContent = "Loading prices…";
-            popup.appendChild(loading);
-            return;
-        }
-
-        if (priceError && !Object.keys(prices).length) {
-            const error = document.createElement("div");
-            error.className = "crv-missing";
-            error.textContent = "Prices unavailable: " + priceError;
-            popup.appendChild(error);
-            return;
-        }
 
         let total = 0;
         let missing = false;
 
         rewards.forEach(item => {
             const price = prices[item.id];
-            const name = item.name +
-                (item.quantity > 1 ? " ×" + item.quantity : "");
+            const row = document.createElement("div");
+            row.className = "crv-line";
 
-            if (Number.isFinite(price) && price > 0) {
-                addLine(popup, name, money(price * item.quantity));
+            const name = document.createElement("span");
+            name.className = "crv-name";
+            name.textContent = item.name;
+
+            const value = document.createElement("span");
+            if (price != null) {
+                value.className = "crv-price";
+                value.textContent = money(price * item.quantity);
                 total += price * item.quantity;
             } else {
-                addLine(popup, name, "Unavailable", true);
+                value.className = "crv-missing";
+                value.textContent = "Unavailable";
                 missing = true;
             }
+
+            row.append(name, value);
+            popup.appendChild(row);
         });
 
         const totalRow = document.createElement("div");
@@ -365,8 +453,7 @@
         if (missing) {
             const note = document.createElement("div");
             note.className = "crv-missing";
-            note.textContent =
-                "Some prices unavailable; total is incomplete.";
+            note.textContent = "Some prices unavailable; total is incomplete.";
             popup.appendChild(note);
         }
     }
@@ -399,12 +486,12 @@
     function inspectNode(node) {
         if (!node || node.nodeType !== 1) return;
 
-        if (node.matches && node.matches(RESULT_SELECTOR)) {
+        if (matchesAny(node, RESULT_SELECTORS)) {
             inspectSection(node);
         }
 
         if (node.querySelectorAll) {
-            node.querySelectorAll(RESULT_SELECTOR).forEach(inspectSection);
+            findElements(node, RESULT_SELECTORS).forEach(inspectSection);
         }
     }
 
@@ -414,7 +501,7 @@
 
         requestAnimationFrame(() => {
             refreshScheduled = false;
-            document.querySelectorAll(RESULT_SELECTOR).forEach(inspectSection);
+            findElements(document, RESULT_SELECTORS).forEach(inspectSection);
 
             if (activeSection && !activeSection.isConnected) {
                 closePopup();
@@ -438,10 +525,10 @@
                 if (node.nodeType !== 1) continue;
 
                 if (
-                    (node.matches && node.matches(RESULT_SELECTOR)) ||
-                    (node.querySelector && node.querySelector(RESULT_SELECTOR)) ||
-                    (node.matches && node.matches(ITEM_SELECTOR)) ||
-                    (node.querySelector && node.querySelector(ITEM_SELECTOR))
+                    matchesAny(node, RESULT_SELECTORS) ||
+                    findElement(node, RESULT_SELECTORS) ||
+                    matchesAny(node, ITEM_SELECTORS) ||
+                    findElement(node, ITEM_SELECTORS)
                 ) {
                     inspectNode(node);
                     shouldInspect = true;
@@ -456,11 +543,44 @@
         if (shouldInspect) scheduleInspect();
     });
 
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    function startPageWatcher() {
+        if (pageChangeTimer) return;
+        pageChangeTimer = setInterval(() => {
+            if (location.href === previousHref) return;
+            previousHref = location.href;
 
-    scheduleInspect();
-    loadPrices();
+            closePopup();
+            processed.clear();
+
+            scheduleInspect();
+        }, POLL_INTERVAL);
+    }
+
+    function stopPageWatcher() {
+        if (pageChangeTimer) {
+            clearInterval(pageChangeTimer);
+            pageChangeTimer = null;
+        }
+    }
+
+    function init() {
+        addStyles();
+        loadPrices();
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        scheduleInspect();
+        startPageWatcher();
+
+        log("Initialized. API key:", API_KEY ? "present" : "missing (cache only)");
+    }
+
+    if (document.body) {
+        init();
+    } else {
+        document.addEventListener("DOMContentLoaded", init, { once: true });
+    }
 })();
