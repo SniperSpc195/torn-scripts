@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA Drug Trade Route Optimizer
 // @namespace    tornpda-drug-trade-route-optimizer
-// @version      1.4.0
+// @version      1.4.1
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Travel_Profit_Optimizer.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Travel_Profit_Optimizer.meta.js
 // @description  Drug price comparisons and optimized travel trade routes.
@@ -22,7 +22,7 @@
     const STALE_TTL = 30 * 60 * 1000;
     const YATA_URL = "https://yata.yt/api/v1/travel/export/";
     const PROM_URL = "https://api.prombot.co.uk/api/travel";
-    const PANEL_ID = "tdro-panel-v140";
+    const PANEL_ID = "tdro-panel-v141";
 
     const COUNTRIES = [
         { code: "mex", name: "Mexico", minutes: 17 },
@@ -214,6 +214,10 @@
                 const quantity = Number(
                     item.quantity ?? item.qty ?? item.stock ?? item.amount ?? 0
                 );
+                // A city with no stock cannot sell the drug to you and will not
+                // buy it back from you either. Skip it so routes never list a
+                // location that "sells" but won't buy.
+                if (!Number.isFinite(quantity) || quantity <= 0) continue;
                 result[country.code][normalizeKey(drugName)] = {
                     id: String(item.id ?? item.item_id ?? normalizeKey(drugName)),
                     name: drugName,
@@ -317,7 +321,15 @@
                     const destinationItem = getDrugItem(destination.code, drugName);
                     if (!originItem || !destinationItem) continue;
                     const buyPrice = originItem.cost;
-                    const sellPrice = destinationItem.cost * 0.75;
+                    // Estimated sell (buy-back) price at the destination is 75%
+                    // of what the destination charges to buy it. Cap the sell
+                    // price so it never fluctuates more than +/-75% from the
+                    // buy price, preventing wildly incorrect sale prices.
+                    let sellPrice = destinationItem.cost * 0.75;
+                    const sellFloor = buyPrice * 0.25;
+                    const sellCeil = buyPrice * 1.75;
+                    if (sellPrice < sellFloor) sellPrice = sellFloor;
+                    if (sellPrice > sellCeil) sellPrice = sellCeil;
                     const profitPerUnit = sellPrice - buyPrice;
                     if (!Number.isFinite(profitPerUnit) || profitPerUnit <= 0) continue;
                     const quantityAvailable = originItem.quantity > 0
