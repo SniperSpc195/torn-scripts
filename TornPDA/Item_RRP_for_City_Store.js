@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Store Market RRP Highlighter
 // @namespace    tornpda-store-rrp-highlighter
-// @version      7.0.2
+// @version      7.0.3
 // @description  Displays cached Torn API market values below city resale prices.
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Item_RRP_for_City_Store.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Item_RRP_for_City_Store.meta.js
@@ -45,8 +45,10 @@
 (function () {
     "use strict";
 
-    if (window.__storeRRPv7Running) return;
-    window.__storeRRPv7Running = true;
+    /** @type {any} */
+    const win = window;
+    if (win.__storeRRPv7Running) return;
+    win.__storeRRPv7Running = true;
 
     // Torn City Store Market RRP Highlighter
     // Displays cached Torn API market values below city resale prices.
@@ -54,42 +56,73 @@
     // automatically; on desktop, store your key in localStorage under
     // "tornpda_store_api_key". Prices are cached for 7 days.
 
+    /** @type {string} */
     const STORAGE_KEY_PREFIX = "tornpda_store_api_key";
 
+    /**
+     * Resolves the Torn API key. TornPDA injects ###PDA-APIKEY### automatically;
+     * desktop users can store their key in localStorage under STORAGE_KEY_PREFIX.
+     * @returns {string | null}
+     */
     function resolveApiKey() {
+        /** @type {string} */
         const inlineKey = "###PDA-APIKEY###";
         if (inlineKey && !inlineKey.includes("###") && inlineKey.length >= 10) {
             return inlineKey;
         }
         try {
+            /** @type {string | null} */
             const stored = localStorage.getItem(STORAGE_KEY_PREFIX);
             if (stored && stored.length >= 10) return stored;
         } catch (_) {}
         return null;
     }
 
+    /** @type {string} */
     const PREFIX = "[Store RRP]";
+    /** @type {string | null} */
     const API_KEY = resolveApiKey();
+    /** @type {string} */
     const API_URL = "https://api.torn.com/torn/?selections=items&key=";
+    /** @type {string} */
     const CACHE_KEY = "store_rrp_market_value_v7";
+    /** @type {string} */
     const RETRY_KEY = "store_rrp_market_value_v7_retry";
+    /** @type {number} */
     const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+    /** @type {number} */
     const RETRY_COOLDOWN = 15 * 60 * 1000;
+    /** @type {string} */
     const ROW_SELECTOR = ".sell-list-wrap ul.sell-items-list > li";
+    /** @type {string} */
     const LABEL_CLASS = "store-rrp-market-value";
 
+    /** @type {Record<string, number>} */
     let prices = {};
+    /** @type {Element | null} */
     let activeList = null;
+    /** @type {MutationObserver | null} */
     let listObserver = null;
+    /** @type {MutationObserver | null} */
     let pageObserver = null;
+    /** @type {number | null} */
     let scanTimer = null;
+    /** @type {boolean} */
     let initialized = false;
+    /** @type {boolean} */
     let pricesLoaded = false;
 
+    /**
+     * @param {...any} args
+     */
     function log(...args) {
         console.log(PREFIX, ...args);
     }
 
+    /**
+     * @param {string | null | undefined} name
+     * @returns {string}
+     */
     function normalizeName(name) {
         return String(name || "")
             .trim()
@@ -97,10 +130,18 @@
             .replace(/\s+/g, " ");
     }
 
+    /**
+     * @param {number} value
+     * @returns {string}
+     */
     function formatMoney(value) {
         return "$" + Math.round(value).toLocaleString("en-US");
     }
 
+    /**
+     * @param {Record<string, number> | null | undefined} value
+     * @returns {boolean}
+     */
     function validPrices(value) {
         if (!value || typeof value !== "object") return false;
 
@@ -111,11 +152,16 @@
         });
     }
 
+    /**
+     * @returns {{ savedAt: number, prices: Record<string, number> } | null}
+     */
     function readCache() {
         try {
+            /** @type {string | null} */
             const raw = localStorage.getItem(CACHE_KEY);
             if (!raw) return null;
 
+            /** @type {any} */
             const cache = JSON.parse(raw);
             if (
                 !cache ||
@@ -128,11 +174,15 @@
 
             return cache;
         } catch (error) {
-            log("Cache read failed:", error.message);
+            const msg = error instanceof Error ? error.message : String(error);
+            log("Cache read failed:", msg);
             return null;
         }
     }
 
+    /**
+     * @param {Record<string, number>} newPrices
+     */
     function saveCache(newPrices) {
         try {
             localStorage.setItem(
@@ -140,7 +190,8 @@
                 JSON.stringify({ savedAt: Date.now(), prices: newPrices })
             );
         } catch (error) {
-            log("Cache save failed:", error.message);
+            const msg = error instanceof Error ? error.message : String(error);
+            log("Cache save failed:", msg);
         }
     }
 
@@ -150,7 +201,9 @@
 
     function retryIsCoolingDown() {
         try {
-            const retryAt = Number(localStorage.getItem(RETRY_KEY) || 0);
+            /** @type {string | null} */
+            const raw = localStorage.getItem(RETRY_KEY);
+            const retryAt = Number(raw || 0);
             return retryAt > Date.now();
         } catch (_) {
             return false;
@@ -169,13 +222,27 @@
         } catch (_) {}
     }
 
+    /**
+     * HTTP GET helper. Uses TornPDA's PDA_httpGet when available (TornPDA),
+     * otherwise falls back to native fetch (desktop browsers).
+     * @param {string} url
+     * @returns {Promise<{ responseText: string }>}
+     */
+    async function httpGet(url) {
+        if (typeof PDA_httpGet === "function") {
+            return PDA_httpGet(url, {});
+        }
+        const response = await fetch(url);
+        return { responseText: await response.text() };
+    }
+
     async function fetchPrices() {
         if (!API_KEY) {
             log("No API key available; using cached prices only.");
             return;
         }
 
-        const response = await PDA_httpGet(API_URL + encodeURIComponent(API_KEY), {});
+        const response = await httpGet(API_URL + encodeURIComponent(API_KEY));
         if (!response || typeof response.responseText !== "string") {
             throw new Error("No readable response from the Torn API.");
         }
@@ -187,16 +254,17 @@
             throw new Error("The Torn API response was not valid JSON.");
         }
 
-        if (data.error) {
+        if (data && data.error) {
             throw new Error(
                 "Torn API error " + data.error.code + ": " + data.error.error
             );
         }
 
-        if (!data.items || typeof data.items !== "object") {
+        if (!data || !data.items || typeof data.items !== "object") {
             throw new Error("The API response contained no item dataset.");
         }
 
+        /** @type {Record<string, number>} */
         const result = {};
         for (const item of Object.values(data.items)) {
             if (!item || typeof item.name !== "string") continue;
@@ -247,12 +315,13 @@
             prices = await fetchPrices();
         } catch (error) {
             setRetryCooldown();
+            const msg = error instanceof Error ? error.message : String(error);
             if (cache) {
                 prices = cache.prices;
-                log("Refresh failed; using cached prices:", error.message);
+                log("Refresh failed; using cached prices:", msg);
             } else {
                 prices = {};
-                log("Could not load market prices:", error.message);
+                log("Could not load market prices:", msg);
             }
         }
     }
@@ -260,20 +329,25 @@
     function scanRows() {
         if (!activeList || !activeList.isConnected) return;
 
+        /** @type {NodeListOf<Element>} */
         const rows = activeList.querySelectorAll(":scope > li");
         let displayed = 0;
 
         for (const row of rows) {
+            /** @type {Element | null} */
             const item = row.querySelector("ul.item");
             if (!item) continue;
 
+            /** @type {Element | null} */
             const nameNode = item.querySelector(".name");
+            /** @type {Element | null} */
             const cityPrice = item.querySelector("li.value");
             if (!nameNode || !cityPrice) continue;
 
             const name = normalizeName(nameNode.textContent);
             if (!name) continue;
 
+            /** @type {Element | null} */
             let label = cityPrice.querySelector("." + LABEL_CLASS);
             if (label && label.dataset.itemName !== name) {
                 label.remove();
@@ -287,8 +361,17 @@
             }
 
             const cityPriceText = Array.from(cityPrice.childNodes)
-                .filter(node => !(node.nodeType === 1 && node.classList.contains(LABEL_CLASS)))
-                .map(node => node.textContent)
+                .filter(function (node) {
+                    if (node.nodeType === 1) {
+                        /** @type {Element} */
+                        const el = node;
+                        return !el.classList.contains(LABEL_CLASS);
+                    }
+                    return true;
+                })
+                .map(function (node) {
+                    return node.textContent;
+                })
                 .join(" ");
             const cityValue = Number(cityPriceText.replace(/[^0-9.]/g, ""));
 
@@ -324,6 +407,9 @@
         }, 200);
     }
 
+    /**
+     * @param {Element} list
+     */
     function bindList(list) {
         if (list === activeList) return;
 
@@ -337,23 +423,37 @@
         if (pricesLoaded) scanRows();
 
         listObserver = new MutationObserver(function (records) {
-            const relevant = records.some(function (record) {
-                const target = record.target.nodeType === 1
-                    ? record.target
-                    : record.target.parentElement;
-                if (target && target.closest && target.closest("." + LABEL_CLASS)) {
-                    return false;
+            let relevant = false;
+
+            for (const record of records) {
+                /** @type {Element | null} */
+                let target = null;
+                if (record.target.nodeType === 1) {
+                    target = /** @type {Element} */ (record.target);
+                } else if (record.target.parentElement) {
+                    target = record.target.parentElement;
                 }
 
-                const changedNodes = [...record.addedNodes, ...record.removedNodes];
-                return changedNodes.some(function (node) {
-                    if (node.nodeType !== 1) return false;
-                    if (node.classList && node.classList.contains(LABEL_CLASS)) {
-                        return false;
+                if (target && target.closest("." + LABEL_CLASS)) {
+                    continue;
+                }
+
+                for (const node of [...record.addedNodes, ...record.removedNodes]) {
+                    if (node.nodeType !== 1) continue;
+                    /** @type {Element} */
+                    const el = node;
+                    if (el.classList.contains(LABEL_CLASS)) {
+                        continue;
                     }
-                    return true;
-                }) || record.type === "characterData";
-            });
+                    relevant = true;
+                    break;
+                }
+
+                if (relevant || record.type === "characterData") {
+                    relevant = true;
+                    break;
+                }
+            }
 
             if (relevant) scheduleScan();
         });
@@ -368,6 +468,7 @@
     }
 
     function checkForList() {
+        /** @type {Element | null} */
         const list = document.querySelector(".sell-list-wrap ul.sell-items-list");
         if (!list) return;
 
@@ -377,6 +478,7 @@
             log("Sell Items list found; loading prices.");
             loadPrices().then(function () {
                 pricesLoaded = true;
+                /** @type {Element | null} */
                 const currentList = document.querySelector(".sell-list-wrap ul.sell-items-list");
                 if (currentList) bindList(currentList);
                 scanRows();

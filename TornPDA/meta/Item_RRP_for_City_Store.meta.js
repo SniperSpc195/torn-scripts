@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Store Market RRP Highlighter
 // @namespace    tornpda-store-rrp-highlighter
-// @version      7.0.2
+// @version      7.0.3
 // @match        https://www.torn.com/*
 // @run-at       document-end
 // @grant        none
