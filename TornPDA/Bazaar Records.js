@@ -1,49 +1,81 @@
 // ==UserScript==
- // @name         Torn 24-Hour Sales by Buyer
- // @namespace    torn-sales-by-buyer
- // @version      2.1.1
- // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Bazaar%20Records.js
- // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Bazaar%20Records.meta.js
- // @description  Bazaar sales totals grouped by buyer with clickable profiles.
- // @match        https://www.torn.com/*
- // @run-at       document-end
- // @grant        none
- // ==/UserScript==
+// @name         Torn 24-Hour Sales by Buyer
+// @namespace    torn-sales-by-buyer
+// @version      2.1.2
+// @description  Bazaar sales totals grouped by buyer with clickable profiles.
+// @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Bazaar%20Records.js
+// @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Bazaar%20Records.meta.js
+// @match        https://www.torn.com/*
+// @run-at       document-end
+// @grant        none
+// ==/UserScript==
 
- (function () {
-     "use strict";
+// ============================================================================
+// Torn 24-Hour Sales by Buyer — Overview
+// ============================================================================
+//
+// Purpose:
+//   Groups Torn bazaar sales from the last 24 hours by buyer, showing total
+//   revenue, transaction count, and items sold per buyer. Works on both
+//   TornPDA and desktop browsers.
+//
+// API key:
+//   TornPDA injects the key automatically (###PDA-APIKEY###). Desktop users
+//   can store their Torn API key in localStorage:
+//
+//       localStorage.setItem("tornpda_bazaar_api_key", "YOUR_API_KEY_HERE")
+//
+//   Or set it from the browser console, then reload the page. Without a key
+//   the script reports that no key is available and does not make API calls.
+//
+// What it does:
+//   1. Adds a "Sales 24h" button to the Torn log page.
+//   2. Fetches the user's Torn API log for the past 24 hours.
+//   3. Filters for bazaar-sell entries and groups them by buyer.
+//   4. Resolves buyer names via the Torn user API when needed.
+//   5. Displays a table in a popup panel with clickable profile links.
+//   6. Exports the results to CSV.
+//
+// Files changed:
+//   None (read-only, writes only a CSV download).
+//
+// ============================================================================
 
-     // TornPDA Bazaar Records
-     // Displays bazaar sales totals grouped by buyer over the last 24 hours.
-     // Works on both TornPDA and desktop browsers. TornPDA injects the API key
-     // automatically; on desktop, store your key in localStorage under
-     // "tornpda_bazaar_api_key".
+(function () {
+    "use strict";
 
-     if (window.__tornSalesByBuyerLoaded) return;
-     window.__tornSalesByBuyerLoaded = true;
+    // Prevent duplicate initialization on TornPDA SPA re-injection.
+    if (window.__tornSalesByBuyerLoaded) return;
+    window.__tornSalesByBuyerLoaded = true;
 
-     const STORAGE_KEY_PREFIX = "tornpda_bazaar_api_key";
+    const STORAGE_KEY_PREFIX = "tornpda_bazaar_api_key";
 
-     function resolveApiKey() {
-         const inlineKey = "###PDA-APIKEY###";
-         if (inlineKey && !inlineKey.includes("###") && inlineKey.length >= 10) {
-             return inlineKey;
-         }
-         try {
-             const stored = localStorage.getItem(STORAGE_KEY_PREFIX);
-             if (stored && stored.length >= 10) return stored;
-         } catch (_) {}
-         return null;
-     }
+    const PREFIX = "[Sales by Buyer]";
 
-     const API_KEY = resolveApiKey();
-     const PREFIX = "[Sales by Buyer]";
-     const PAGE_SIZE = 1000;
+    const PAGE_SIZE = 1000;
 
-     let busy = false;
-     let csvRows = [];
-     let currentPage = "";
-     const buyerNameCache = new Map();
+    let busy = false;
+    let csvRows = [];
+    let currentPage = "";
+    const buyerNameCache = new Map();
+
+    // resolveApiKey()
+    //   Returns the Torn API key from TornPDA injection ("###PDA-APIKEY###")
+    //   or falls back to a value stored in localStorage by the user. Returns
+    //   null when no usable key is available.
+    function resolveApiKey() {
+        const inlineKey = "###PDA-APIKEY###";
+        if (inlineKey && !inlineKey.includes("###") && inlineKey.length >= 10) {
+            return inlineKey;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY_PREFIX);
+            if (stored && stored.length >= 10) return stored;
+        } catch (_) {}
+        return null;
+    }
+
+    const API_KEY = resolveApiKey();
 
      const style = document.createElement("style");
      style.textContent = `
@@ -143,30 +175,44 @@
      `;
      document.head.appendChild(style);
 
-     const money = n =>
-         "$" + Math.round(n).toLocaleString("en-US");
+     // money(n)
+//   Formats a number as a dollar amount with thousands separators.
+const money = n =>
+    "$" + Math.round(n).toLocaleString("en-US");
 
-     const fmtDate = ts =>
-         new Date(ts * 1000).toLocaleString();
+// fmtDate(ts)
+//   Formats a Unix timestamp (seconds) as a localized date/time string.
+const fmtDate = ts =>
+    new Date(ts * 1000).toLocaleString();
 
-     function isLogPage() {
-         const url = location.href.toLowerCase();
-         return url.includes("sid=log") ||
-                url.includes("logs.php") ||
-                url.includes("/log.php");
-     }
+// isLogPage()
+//   Returns true when the current Torn page is the log page
+//   (sid=log, logs.php, or /log.php).
+function isLogPage() {
+    const url = location.href.toLowerCase();
+    return url.includes("sid=log") ||
+           url.includes("logs.php") ||
+           url.includes("/log.php");
+}
 
-     function makeButton() {
-         if (!isLogPage() || document.getElementById("sb-launch")) return;
+// makeButton()
+//   Injects the "Sales 24h" launch button onto the log page if it is not
+//   already present. Called on init, on page change, and by the observer.
+function makeButton() {
+    if (!isLogPage() || document.getElementById("sb-launch")) return;
 
-         const button = document.createElement("button");
-         button.id = "sb-launch";
-         button.textContent = "Sales 24h";
-         button.onclick = openPanel;
-         document.body.appendChild(button);
-     }
+    const button = document.createElement("button");
+    button.id = "sb-launch";
+    button.textContent = "Sales 24h";
+    button.onclick = openPanel;
+    document.body.appendChild(button);
+}
 
-     function openPanel() {
+// openPanel()
+//   Creates and shows the results panel. On click of "Fetch sales" it
+//   retrieves log entries, parses bazaar sales, resolves buyer names, and
+//   renders a grouped report. Also wires up the CSV export button.
+function openPanel() {
          if (document.getElementById("sb-panel")) return;
 
          const panel = document.createElement("section");
@@ -249,39 +295,46 @@
          };
      }
 
-     async function requestLogs(from, to) {
-         const url = "https://api.torn.com/v2/user/log" +
-             "?limit=" + PAGE_SIZE +
-             "&from=" + encodeURIComponent(from) +
-             "&to=" + encodeURIComponent(to) +
-             "&key=" + encodeURIComponent(API_KEY);
+// requestLogs(from, to)
+//   Requests a page of Torn API log entries between two Unix timestamps.
+//   Returns the parsed log array or throws on API/network errors.
+async function requestLogs(from, to) {
+    const url = "https://api.torn.com/v2/user/log" +
+        "?limit=" + PAGE_SIZE +
+        "&from=" + encodeURIComponent(from) +
+        "&to=" + encodeURIComponent(to) +
+        "&key=" + encodeURIComponent(API_KEY);
 
-         const response = await PDA_httpGet(url, {});
-         if (!response) throw new Error("Empty API response.");
+    const response = await PDA_httpGet(url, {});
+    if (!response) throw new Error("Empty API response.");
 
-         const raw = response.responseText ??
-                     response.response ??
-                     response;
+    const raw = response.responseText ??
+                response.response ??
+                response;
 
-         const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
 
-         if (data.error) {
-             throw new Error(
-                 "Torn API " + (data.error.code ?? "?") +
-                 ": " + (data.error.error || "Request failed")
-             );
-         }
+    if (data.error) {
+        throw new Error(
+            "Torn API " + (data.error.code ?? "?") +
+            ": " + (data.error.error || "Request failed")
+        );
+    }
 
-         if (!Array.isArray(data.log)) {
-             throw new Error(
-                 "Unexpected API response. Expected the v2 log array."
-             );
-         }
+    if (!Array.isArray(data.log)) {
+        throw new Error(
+            "Unexpected API response. Expected the v2 log array."
+        );
+    }
 
-         return data.log;
-     }
+    return data.log;
+}
 
-     async function fetchSales(start, end, $) {
+// fetchSales(start, end, $)
+//   Paginates through the Torn API log between `start` and `end`,
+//   collecting all entries. Respects a 30-page safety limit and stops
+//   early when pagination stalls. Returns the collected entry array.
+async function fetchSales(start, end, $) {
          const collected = new Map();
          let cursor = end;
          let pages = 0;
@@ -332,21 +385,28 @@
          return [...collected.values()];
      }
 
-     function logDetails(entry) {
-         const details = entry.details || {};
+// logDetails(entry)
+//   Normalizes a Torn log entry into { category, title, data } by reading
+//   from entry.details with fallback to top-level entry fields.
+function logDetails(entry) {
+    const details = entry.details || {};
 
-         return {
-             category: String(
-                 details.category ?? entry.category ?? ""
-             ),
-             title: String(
-                 details.title ?? entry.title ?? ""
-             ),
-             data: entry.data || {}
-         };
-     }
+    return {
+        category: String(
+            details.category ?? entry.category ?? ""
+        ),
+        title: String(
+            details.title ?? entry.title ?? ""
+        ),
+        data: entry.data || {}
+    };
+}
 
-     function parseSale(entry) {
+// parseSale(entry)
+//   Extracts a bazaar-sell record from a log entry. Returns null when the
+//   entry is not a bazaar sale, or an object with timestamp, buyer,
+//   buyerId, items, quantity, total, and valid flag.
+function parseSale(entry) {
          const info = logDetails(entry);
 
          if (info.category.toLowerCase() !== "bazaars" ||
@@ -413,14 +473,18 @@
          };
      }
 
-     async function resolveBuyerNames(sales, $) {
-         const ids = [...new Set(
-             sales
-                 .filter(sale => sale.buyerId && !sale.buyer)
-                 .map(sale => sale.buyerId)
-         )];
+// resolveBuyerNames(sales, $)
+//   Looks up buyer names via the Torn user API for sales that have an ID
+//   but no name. Results are cached in buyerNameCache to avoid repeats.
+//   Updates the status text periodically while looking up names.
+async function resolveBuyerNames(sales, $) {
+    const ids = [...new Set(
+        sales
+            .filter(sale => sale.buyerId && !sale.buyer)
+            .map(sale => sale.buyerId)
+    )];
 
-         let lookedUp = 0;
+    let lookedUp = 0;
 
          for (const id of ids) {
              if (buyerNameCache.has(id)) continue;
@@ -475,25 +539,32 @@
          }
      }
 
-     function addProfileLink(cell, buyerId, buyerName) {
-         if (buyerId && /^\d+$/.test(String(buyerId))) {
-             const link = document.createElement("a");
+// addProfileLink(cell, buyerId, buyerName)
+//   Appends a clickable Torn profile link to a table cell when a numeric
+//   buyerId is available, otherwise shows the buyer name or "Unknown buyer".
+function addProfileLink(cell, buyerId, buyerName) {
+    if (buyerId && /^\d+$/.test(String(buyerId))) {
+        const link = document.createElement("a");
 
-             link.className = "sb-profile";
-             link.href =
-                 "https://www.torn.com/profiles.php?XID=" +
-                 encodeURIComponent(buyerId);
-             link.textContent = buyerName || ("Player ID " + buyerId);
-             link.target = "_blank";
-             link.rel = "noopener noreferrer";
+        link.className = "sb-profile";
+        link.href =
+            "https://www.torn.com/profiles.php?XID=" +
+            encodeURIComponent(buyerId);
+        link.textContent = buyerName || ("Player ID " + buyerId);
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
 
-             cell.appendChild(link);
-         } else {
-             cell.textContent = buyerName || "Unknown buyer";
-         }
-     }
+        cell.appendChild(link);
+    } else {
+        cell.textContent = buyerName || "Unknown buyer";
+    }
+}
 
-     async function renderReport(entries, start, end, $) {
+// renderReport(entries, start, end, $)
+//   Takes raw log entries, parses bazaar sales, groups them by buyer,
+//   resolves names, and renders a full HTML report (summary, table,
+//   warnings, coverage info) into the panel. Also populates csvRows for export.
+async function renderReport(entries, start, end, $) {
          const results = $("sb-results");
          results.replaceChildren();
          csvRows = [];
@@ -725,30 +796,36 @@
              " recorded sales across " + buyers.size + " buyers.";
      }
 
-     function refreshButton() {
-         const page = location.href;
-         if (page === currentPage) return;
+// refreshButton()
+//   Re-creates the launch button when navigating between Torn pages without
+//   a full reload. Removes any existing button/panel first.
+function refreshButton() {
+    const page = location.href;
+    if (page === currentPage) return;
 
-         currentPage = page;
-         document.getElementById("sb-launch")?.remove();
-         document.getElementById("sb-panel")?.remove();
+    currentPage = page;
+    document.getElementById("sb-launch")?.remove();
+    document.getElementById("sb-panel")?.remove();
 
-         makeButton();
-     }
+    makeButton();
+}
 
-     refreshButton();
+// Initialize: add launch button, watch for SPA navigation, and poll
+// periodically to re-inject the button if Torn removes it.
+refreshButton();
 
-     const observer = new MutationObserver(() => {
-         if (!document.getElementById("sb-launch") &&
-             !document.getElementById("sb-panel")) {
-             makeButton();
-         }
-     });
+const observer = new MutationObserver(() => {
+    if (!document.getElementById("sb-launch") &&
+        !document.getElementById("sb-panel")) {
+        makeButton();
+    }
+});
 
-     observer.observe(document.documentElement, {
-         childList: true,
-         subtree: true
-     });
+observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+});
 
-     setInterval(refreshButton, 1000);
- })();
+// Polls once per second to catch SPA navigation that removes the button.
+setInterval(refreshButton, 1000);
+})();

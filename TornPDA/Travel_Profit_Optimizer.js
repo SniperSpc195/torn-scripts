@@ -1,16 +1,47 @@
 // ==UserScript==
 // @name         TornPDA Drug Trade Route Optimizer
 // @namespace    tornpda-drug-trade-route-optimizer
-// @version      1.4.1
+// @version      1.4.2
+// @description  Drug price comparisons and optimized travel trade routes.
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Travel_Profit_Optimizer.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Travel_Profit_Optimizer.meta.js
-// @description  Drug price comparisons and optimized travel trade routes.
 // @match        https://www.torn.com/page.php*
 // @grant        GM_xmlhttpRequest
 // @connect      yata.yt
 // @connect      api.prombot.co.uk
 // @run-at       document-idle
 // ==/UserScript==
+
+// ============================================================================
+// TornPDA Drug Trade Route Optimizer — Overview
+// ============================================================================
+//
+// Purpose:
+//   Compares drug buy prices across Torn cities and calculates profitable
+//   travel trade routes. Displays rankings and route suggestions in a panel
+//   on the Travel Agency page. Works on TornPDA and desktop browsers.
+//
+// Data sources:
+//   Reads live drug prices from two public price feeds (YATA and Prometheus).
+//   No Torn API key is required. Results are cached in localStorage for
+//   15 minutes so the script works offline or when feeds are slow.
+//
+// What it does:
+//   1. Fetches drug prices from YATA and Prometheus APIs.
+//   2. Merges and normalizes prices by country and drug type.
+//   3. Calculates profitable buy→sell routes with estimated hourly profit.
+//   4. Ranks drugs by sell price for the detected destination country.
+//   5. Updates automatically when you change destination or when cache expires.
+//
+// Files changed:
+//   None (read-only; writes only to localStorage cache).
+//
+// Desktop note:
+//   This script uses GM_xmlhttpRequest (provided by TornPDA and most
+//   desktop userscript managers). If GM_xmlhttpRequest is unavailable it
+//   falls back to the native fetch API.
+//
+// ============================================================================
 
 (function () {
     "use strict";
@@ -124,32 +155,45 @@
         return quantity;
     }
 
+    // requestJson(url)
+    //   Fetches and parses JSON from a URL. Uses TornPDA's GM_xmlhttpRequest
+    //   when available, falling back to the native fetch API on desktop
+    //   browsers. Returns the parsed JSON or rejects on error.
     function requestJson(url) {
         return new Promise((resolve, reject) => {
-            if (typeof GM_xmlhttpRequest !== "function") {
-                reject(new Error("TornPDA GM_xmlhttpRequest is unavailable."));
+            if (typeof GM_xmlhttpRequest === "function") {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url,
+                    timeout: 15000,
+                    headers: { Accept: "application/json" },
+                    onload: response => {
+                        if (response.status < 200 || response.status >= 300) {
+                            reject(new Error("HTTP " + response.status));
+                            return;
+                        }
+                        try {
+                            resolve(JSON.parse(response.responseText));
+                        } catch (_) {
+                            reject(new Error("Invalid JSON received."));
+                        }
+                    },
+                    onerror: () => reject(new Error("Network request failed.")),
+                    ontimeout: () => reject(new Error("Request timed out."))
+                });
                 return;
             }
 
-            GM_xmlhttpRequest({
-                method: "GET",
-                url,
-                timeout: 15000,
-                headers: { Accept: "application/json" },
-                onload: response => {
-                    if (response.status < 200 || response.status >= 300) {
-                        reject(new Error("HTTP " + response.status));
-                        return;
+            // Desktop fallback: native fetch when GM_xmlhttpRequest is unavailable.
+            fetch(url, { headers: { Accept: "application/json" } })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("HTTP " + response.status);
                     }
-                    try {
-                        resolve(JSON.parse(response.responseText));
-                    } catch (_) {
-                        reject(new Error("Invalid JSON received."));
-                    }
-                },
-                onerror: () => reject(new Error("Network request failed.")),
-                ontimeout: () => reject(new Error("Request timed out."))
-            });
+                    return response.json();
+                })
+                .then(resolve)
+                .catch(error => reject(new Error(error.message || "Network request failed.")));
         });
     }
 

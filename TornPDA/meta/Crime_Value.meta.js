@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA Crime Reward Values
 // @namespace    tornpda-crime-reward-values
-// @version      4.5.0
+// @version      4.5.1
 // @match        https://www.torn.com/*
 // @run-at       document-end
 // @grant        none

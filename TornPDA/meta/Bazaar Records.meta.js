@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn 24-Hour Sales by Buyer
 // @namespace    torn-sales-by-buyer
-// @version      2.1.1
+// @version      2.1.2
 // @description  Bazaar sales totals grouped by buyer with clickable profiles.
 // @match        https://www.torn.com/*
 // @run-at       document-end

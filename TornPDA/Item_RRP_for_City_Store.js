@@ -1,14 +1,46 @@
 // ==UserScript==
 // @name         Torn City Store Market RRP Highlighter
 // @namespace    tornpda-store-rrp-highlighter
-// @version      7.0.1
+// @version      7.0.2
+// @description  Displays cached Torn API market values below city resale prices.
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Item_RRP_for_City_Store.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Item_RRP_for_City_Store.meta.js
-// @description  Displays cached Torn API market values below city resale prices.
 // @match        https://www.torn.com/*
 // @run-at       document-end
 // @grant        none
 // ==/UserScript==
+
+// ============================================================================
+// Torn City Store Market RRP Highlighter — Overview
+// ============================================================================
+//
+// Purpose:
+//   Displays cached Torn API market values below city resale prices in the
+//   City Store's sell list, so you can see whether an item's city resale price
+//   is above or below its market value. Works on both TornPDA and desktop
+//   browsers.
+//
+// API key:
+//   TornPDA injects the key automatically (###PDA-APIKEY###). Desktop users
+//   can store their Torn API key in localStorage:
+//
+//       localStorage.setItem("tornpda_store_api_key", "YOUR_API_KEY_HERE")
+//
+//   Prices are cached for 7 days, so the script keeps working after the
+//   initial fetch even if the API key is later removed.
+//
+// What it does:
+//   1. Detects the City Store sell list on the page.
+//   2. Fetches item market values from the Torn API (cached for 7 days).
+//   3. Adds a "Market RRP: $price" label below each city resale price.
+//   4. Labels are green when market value is below the city price (good resale),
+//      blue when above.
+//   5. Watches the list dynamically as items are added or removed.
+//
+// Files changed:
+//   None (read-only; writes only to localStorage cache).
+//
+// ============================================================================
 
 (function () {
     "use strict";

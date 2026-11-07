@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA Drug Trade Route Optimizer
 // @namespace    tornpda-drug-trade-route-optimizer
-// @version      1.4.1
+// @version      1.4.2
 // @match        https://www.torn.com/page.php*
 // @grant        GM_xmlhttpRequest
 // @connect      yata.yt

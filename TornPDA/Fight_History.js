@@ -1,14 +1,38 @@
 // ==UserScript==
 // @name         Torn Final-Hit History
 // @namespace    tornpda-final-hit-history
-// @version      1.3.6
+// @version      1.3.7
+// @description  Tracks live trophy-marked fight log entries locally.
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History.meta.js
-// @description  Tracks live trophy-marked fight log entries locally.
 // @match        https://www.torn.com/*
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
+
+// ============================================================================
+// Torn Final-Hit History — Overview
+// ============================================================================
+//
+// Purpose:
+//   Tracks trophy-marked ("final hit") fight-log entries locally on Torn's
+//   Attack, profile, and profile2 pages. Displays a compact history panel with
+//   timestamps, actions, and an optional screen wake lock. No Torn API key is
+//   required. Works on TornPDA and desktop browsers.
+//
+// What it does:
+//   1. Monitors the Torn attack log for new trophy-marked entries via a
+//      MutationObserver and periodic polling.
+//   2. Deduplicates entries and stores up to 20 records in localStorage.
+//   3. Shows a panel with time, action, and Clear/Close controls.
+//   4. Provides an optional screen wake lock so the display stays on during
+//      long fight sessions.
+//   5. Cleans up buttons and panel when navigating away from supported pages.
+//
+// Files changed:
+//   None (read-only; writes only to localStorage).
+//
+// ============================================================================
 
 (function () {
     "use strict";

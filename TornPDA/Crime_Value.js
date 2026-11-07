@@ -1,14 +1,43 @@
 // ==UserScript==
 // @name         TornPDA Crime Reward Values
 // @namespace    tornpda-crime-reward-values
-// @version      4.5.0
+// @version      4.5.1
+// @description  Automatically displays crime reward market values in a compact top popup.
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Crime_Value.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Crime_Value.meta.js
-// @description  Automatically displays crime reward market values in a compact top popup.
 // @match        https://www.torn.com/*
 // @run-at       document-end
 // @grant        none
 // ==/UserScript==
+
+// ============================================================================
+// TornPDA Crime Reward Values — Overview
+// ============================================================================
+//
+// Purpose:
+//   Displays Torn API market values for items received from crimes in a
+//   compact top-center popup. Works on both TornPDA and desktop browsers.
+//
+// API key:
+//   TornPDA injects the key automatically (###PDA-APIKEY###). Desktop users
+//   can store their Torn API key in localStorage:
+//
+//       localStorage.setItem("tornpda_crime_api_key", "YOUR_API_KEY_HERE")
+//
+//   Prices are cached for 24 hours, so the popup still works without an
+//   API key using the last known prices.
+//
+// What it does:
+//   1. Detects crime outcome sections on the Crimes page as they appear.
+//   2. Reads item IDs and quantities from reward images.
+//   3. Looks up market values from the Torn items API (cached locally).
+//   4. Shows a compact popup with each item's value and a total.
+//   5. Automatically closes when the crime result section disappears.
+//
+// Files changed:
+//   None (read-only; writes only to localStorage cache).
+//
+// ============================================================================
 
 (function () {
     "use strict";

@@ -1,14 +1,36 @@
 // ==UserScript==
 // @name         Fight History DOM Debugger
 // @namespace    tornpda-final-hit-history-debug
-// @version      1.0.1
+// @version      1.0.2
+// @description  Locally inspects trophy markers and likely fight-log rows.
 // @downloadURL  https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/Fight_History_Debug.js
 // @updateURL    https://raw.githubusercontent.com/SniperSpc195/torn-scripts/main/TornPDA/meta/Fight_History_Debug.meta.js
-// @description  Locally inspects trophy markers and likely fight-log rows.
 // @match        https://www.torn.com/page.php*
 // @run-at       document-end
 // @grant        none
 // ==/UserScript==
+
+// ============================================================================
+// Fight History DOM Debugger — Overview
+// ============================================================================
+//
+// Purpose:
+//   Helps diagnose how Torn marks final-hit (trophy) fight-log entries in the
+//   DOM. Intended for developers and advanced users who want to understand
+//   how the fight log is structured. Works on TornPDA and desktop browsers.
+//
+// What it does:
+//   1. Adds a "Log DOM Debug" button to the Attack page.
+//   2. Clicking it opens a panel that scans the page for trophy-marker
+//      candidates (images/attributes containing trophy/winner/victory terms).
+//   3. Reports the DOM structure around each marker, including ancestor
+//      chains, nearby tables, and semantic containers.
+//   4. Provides Copy and Select buttons to export the debug report.
+//
+// Files changed:
+//   None (read-only diagnostic; writes nothing outside the page).
+//
+// ============================================================================
 
 (function () {
     "use strict";
